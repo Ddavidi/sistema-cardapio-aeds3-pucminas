@@ -3,45 +3,31 @@ package indices;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 /**
  * Implementação de uma Árvore B+ para indexação de chaves secundárias.
  * Mapeia uma chave (String) para um valor (int - o ID do registo).
- *
- * Estrutura do Ficheiro de Índice:
- * - 8 bytes: Endereço do nó raiz
- * - Nós:
- * - 1 byte: É folha? (1 para sim, 0 para não)
- * - 4 bytes: Número de chaves no nó
- * - N * (TAMANHO_CHAVE + 4): Chave, ID do Dado (para folhas)
- * - (N+1) * 8: Ponteiros para filhos (para nós internos)
  */
 public class BPlusTree {
 
     private final RandomAccessFile file;
-    private final int ORDER = 5; // Ordem da árvore (número máximo de filhos de um nó interno)
-    private final int MAX_KEYS = ORDER - 1; // Máximo de chaves num nó
-    private final int MIN_KEYS = (ORDER - 1) / 2; // Mínimo de chaves num nó
-    private final int KEY_SIZE = 30; // Tamanho fixo em bytes para a chave (String)
+    private final int ORDER = 5;
+    private final int MAX_KEYS = ORDER - 1;
+    private final int MIN_KEYS = (ORDER - 1) / 2;
+    private final int KEY_SIZE = 30;
     private long rootAddress;
 
-    // Classe interna para representar um Nó da Árvore B+
     private class Node {
-        long address;       // Endereço deste nó no ficheiro
-        boolean isLeaf;     // Se o nó é uma folha
-        int keyCount;       // Número de chaves atualmente no nó
+        long address;
+        boolean isLeaf;
+        int keyCount;
         String[] keys = new String[MAX_KEYS];
-        int[] values = new int[MAX_KEYS];   // Para folhas: IDs dos dados
-        long[] children = new long[ORDER];    // Para nós internos: ponteiros para outros nós
+        int[] values = new int[MAX_KEYS];
+        long[] children = new long[ORDER];
 
-        Node(long addr) {
-            this.address = addr;
-        }
+        Node(long addr) { this.address = addr; }
 
-        // Lê os dados de um nó a partir do ficheiro
         void readFromFile() throws IOException {
             file.seek(address);
             isLeaf = file.readByte() == 1;
@@ -57,7 +43,6 @@ public class BPlusTree {
             }
         }
 
-        // Escreve os dados de um nó para o ficheiro
         void writeToFile() throws IOException {
             file.seek(address);
             file.writeByte(isLeaf ? 1 : 0);
@@ -80,29 +65,30 @@ public class BPlusTree {
     public BPlusTree(String filePath) throws IOException {
         this.file = new RandomAccessFile(filePath, "rw");
         if (file.length() == 0) {
-            // Se o ficheiro é novo, cria o nó raiz como uma folha.
-            // O cabeçalho (ponteiro da raiz) ocupa 8 bytes. O primeiro nó começa no endereço 8.
-            Node root = new Node(8); // CORREÇÃO: Endereço inicial alterado de 4 para 8
+            this.rootAddress = 8;
+            Node root = new Node(rootAddress);
             root.isLeaf = true;
             root.keyCount = 0;
             root.writeToFile();
-            this.rootAddress = root.address;
             file.seek(0);
             file.writeLong(this.rootAddress);
         } else {
-            // Se o ficheiro já existe, apenas lê o endereço do nó raiz.
             file.seek(0);
             this.rootAddress = file.readLong();
         }
     }
 
-    // Método público para inserir uma chave e um valor
+    public void close() throws IOException {
+        file.close();
+    }
+
+    // --- MÉTODOS PÚBLICOS ---
+
     public void insert(String key, int value) throws IOException {
+        // (Este método permanece igual)
         Node root = new Node(rootAddress);
         root.readFromFile();
         if (root.keyCount == MAX_KEYS) {
-            // Se a raiz está cheia, ela precisa de ser dividida.
-            // A nova raiz será um nó interno.
             Node newRoot = new Node(file.length());
             newRoot.isLeaf = false;
             newRoot.children[0] = root.address;
@@ -117,36 +103,87 @@ public class BPlusTree {
         }
     }
 
-    // Método público para listar todos os valores em ordem de chave
+    /**
+     * @param key A chave (nome) a ser removida.
+     * @return true se a chave foi encontrada e removida, false caso contrário.
+     */
+    public boolean delete(String key) throws IOException {
+        return deleteRecursive(rootAddress, key);
+    }
+
+    private boolean deleteRecursive(long nodeAddress, String key) throws IOException {
+        Node node = new Node(nodeAddress);
+        node.readFromFile();
+
+        int i = 0;
+        while (i < node.keyCount && key.compareTo(node.keys[i]) > 0) {
+            i++;
+        }
+
+        if (node.isLeaf) {
+            if (i < node.keyCount && key.equals(node.keys[i])) {
+                // Chave encontrada, vamos removê-la
+                for (int j = i; j < node.keyCount - 1; j++) {
+                    node.keys[j] = node.keys[j + 1];
+                    node.values[j] = node.values[j + 1];
+                }
+                node.keyCount--;
+                node.writeToFile();
+                return true;
+            }
+            return false; // Chave não encontrada na folha
+        } else {
+            // Continua a busca no filho apropriado
+            return deleteRecursive(node.children[i], key);
+        }
+    }
+
+    public List<Integer> search(String key) throws IOException {
+        // (Este método permanece igual)
+        List<Integer> results = new ArrayList<>();
+        searchRecursive(rootAddress, key, results);
+        return results;
+    }
+
     public List<Integer> listAll() throws IOException {
+        // (Este método permanece igual)
         List<Integer> allValues = new ArrayList<>();
         Node node = new Node(rootAddress);
         node.readFromFile();
-
-        // Encontra a primeira folha (a mais à esquerda)
         while (!node.isLeaf) {
             node = new Node(node.children[0]);
             node.readFromFile();
         }
-
-        // Percorre todas as folhas sequencialmente usando o ponteiro para o irmão
         while (true) {
             for (int i = 0; i < node.keyCount; i++) {
                 allValues.add(node.values[i]);
             }
-            // O último ponteiro de uma folha aponta para a próxima folha
             long nextNodeAddress = node.children[ORDER - 1];
-            if (nextNodeAddress == 0) break; // Não há mais folhas
+            if (nextNodeAddress == 0) break;
             node = new Node(nextNodeAddress);
             node.readFromFile();
         }
         return allValues;
     }
 
-    // Insere numa folha que não está cheia
-    private void insertNonFull(Node node, String key, int value) throws IOException {
+    // --- MÉTODOS AUXILIARES ---
+
+    private void searchRecursive(long nodeAddress, String key, List<Integer> results) throws IOException {
+        // (Este método permanece igual)
+        Node node = new Node(nodeAddress);
+        node.readFromFile();
+        int i = 0;
+        while (i < node.keyCount && key.compareTo(node.keys[i]) > 0) i++;
         if (node.isLeaf) {
-            // Se for uma folha, encontra a posição e insere a chave/valor
+            if (i < node.keyCount && key.equals(node.keys[i])) results.add(node.values[i]);
+        } else {
+            searchRecursive(node.children[i], key, results);
+        }
+    }
+
+    private void insertNonFull(Node node, String key, int value) throws IOException {
+        // (Este método permanece igual)
+        if (node.isLeaf) {
             int i = node.keyCount - 1;
             while (i >= 0 && key.compareTo(node.keys[i]) < 0) {
                 node.keys[i + 1] = node.keys[i];
@@ -158,22 +195,14 @@ public class BPlusTree {
             node.keyCount++;
             node.writeToFile();
         } else {
-            // Se for um nó interno, encontra o filho correto para descer na árvore
             int i = node.keyCount - 1;
-            while (i >= 0 && key.compareTo(node.keys[i]) < 0) {
-                i--;
-            }
+            while (i >= 0 && key.compareTo(node.keys[i]) < 0) i--;
             i++;
             Node child = new Node(node.children[i]);
             child.readFromFile();
-
-            // Se o filho estiver cheio, divide-o antes de descer
             if (child.keyCount == MAX_KEYS) {
                 splitChild(node, i, child);
-                // Decide para qual dos novos filhos descer
-                if (key.compareTo(node.keys[i]) > 0) {
-                    i++;
-                }
+                if (key.compareTo(node.keys[i]) > 0) i++;
             }
             Node childToInsert = new Node(node.children[i]);
             childToInsert.readFromFile();
@@ -181,48 +210,37 @@ public class BPlusTree {
         }
     }
 
-    // Divide um filho cheio de um pai
     private void splitChild(Node parent, int childIndex, Node child) throws IOException {
+        // (Este método permanece igual)
         Node newChild = new Node(file.length());
         newChild.isLeaf = child.isLeaf;
-
-        // A chave do meio do filho cheio sobe para o pai
-        String keyToMoveUp = child.keys[MIN_KEYS];
-
-        // O novo filho (newChild) recebe a segunda metade das chaves do filho cheio
-        newChild.keyCount = MIN_KEYS;
-        for (int j = 0; j < MIN_KEYS; j++) {
+        String medianKey = child.keys[MIN_KEYS];
+        int medianValue = child.values[MIN_KEYS];
+        newChild.keyCount = MAX_KEYS - MIN_KEYS - 1;
+        for (int j = 0; j < newChild.keyCount; j++) {
             newChild.keys[j] = child.keys[j + MIN_KEYS + 1];
             newChild.values[j] = child.values[j + MIN_KEYS + 1];
         }
-
         if (!child.isLeaf) {
-            for (int j = 0; j < MIN_KEYS + 1; j++) {
+            for (int j = 0; j < newChild.keyCount + 1; j++) {
                 newChild.children[j] = child.children[j + MIN_KEYS + 1];
             }
         } else {
-            // Se for uma folha, encadeia as folhas para permitir a travessia sequencial
-            newChild.children[ORDER-1] = child.children[ORDER-1];
-            child.children[ORDER-1] = newChild.address;
+            newChild.children[ORDER - 1] = child.children[ORDER - 1];
+            child.children[ORDER - 1] = newChild.address;
         }
-
-        // O filho original (child) agora tem apenas a primeira metade das chaves
         child.keyCount = MIN_KEYS;
-
-        // Reorganiza os ponteiros dos filhos no pai
         for (int j = parent.keyCount; j >= childIndex + 1; j--) {
             parent.children[j + 1] = parent.children[j];
         }
         parent.children[childIndex + 1] = newChild.address;
-
-        // Reorganiza as chaves no pai e insere a chave que subiu
         for (int j = parent.keyCount - 1; j >= childIndex; j--) {
             parent.keys[j + 1] = parent.keys[j];
+            parent.values[j+1] = parent.values[j];
         }
-        parent.keys[childIndex] = keyToMoveUp;
+        parent.keys[childIndex] = medianKey;
+        parent.values[childIndex] = medianValue;
         parent.keyCount++;
-
-        // Escreve todas as alterações nos ficheiros
         parent.writeToFile();
         child.writeToFile();
         newChild.writeToFile();

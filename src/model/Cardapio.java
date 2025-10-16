@@ -3,36 +3,36 @@ package model;
 import java.io.*;
 
 /**
- * Classe que representa a entidade Produto.
+ * Classe que representa a entidade Cardapio.
  */
-public class Produto implements Register {
+public class Cardapio implements Register {
 
-    private int idProduto;
+    private int idCardapio;
     private String nome;
     private String descricao;
-    private int idCategoria;  // Campo para o relacionamento 1:N com Categoria
+    private boolean ativo;
 
-    public Produto() {
-        this.idProduto = -1;
+    public Cardapio() {
+        this.idCardapio = -1;
         this.nome = "";
         this.descricao = "";
-        this.idCategoria = -1;
+        this.ativo = false;
     }
 
-    public Produto(String nome, String descricao, int idCategoria) {
-        this.idProduto = -1;
+    public Cardapio(String nome, String descricao, boolean ativo) {
+        this.idCardapio = -1;
         this.nome = nome;
         this.descricao = descricao;
-        this.idCategoria = idCategoria;
+        this.ativo = ativo;
     }
 
     // --- MÉTODOS DA INTERFACE REGISTER ---
 
     @Override
-    public int getID() { return this.idProduto; }
+    public int getID() { return this.idCardapio; }
 
     @Override
-    public void setID(int id) { this.idProduto = id; }
+    public void setID(int id) { this.idCardapio = id; }
 
     @Override
     public String getSecondaryKey() { return this.nome; }
@@ -41,10 +41,10 @@ public class Produto implements Register {
     public byte[] toByteArray() throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        dos.writeInt(this.idProduto);
+        dos.writeInt(this.idCardapio);
         dos.writeUTF(this.nome);
         dos.writeUTF(this.descricao);
-        dos.writeInt(this.idCategoria);
+        dos.writeBoolean(this.ativo);
         return baos.toByteArray();
     }
 
@@ -52,10 +52,10 @@ public class Produto implements Register {
     public void fromByteArray(byte[] byteArray) throws IOException {
         ByteArrayInputStream bais = new ByteArrayInputStream(byteArray);
         DataInputStream dis = new DataInputStream(bais);
-        this.idProduto = dis.readInt();
+        this.idCardapio = dis.readInt();
         this.nome = dis.readUTF();
         this.descricao = dis.readUTF();
-        this.idCategoria = dis.readInt();
+        this.ativo = dis.readBoolean();
     }
 
     // --- GETTERS E SETTERS ---
@@ -64,12 +64,12 @@ public class Produto implements Register {
     public void setNome(String nome) { this.nome = nome; }
     public String getDescricao() { return descricao; }
     public void setDescricao(String descricao) { this.descricao = descricao; }
-    public int getIdCategoria() { return idCategoria; }
-    public void setIdCategoria(int idCategoria) { this.idCategoria = idCategoria; }
+    public boolean isAtivo() { return ativo; }
+    public void setAtivo(boolean ativo) { this.ativo = ativo; }
 
     @Override
     public String toString() {
-        return "Produto [ID=" + idProduto + ", Nome='" + nome + "', Descrição='" + descricao + "', ID Categoria=" + idCategoria + "]";
+        return "Cardapio [ID=" + idCardapio + ", Nome='" + nome + "', Descrição='" + descricao + "', Ativo=" + ativo + "]";
     }
 }
 
