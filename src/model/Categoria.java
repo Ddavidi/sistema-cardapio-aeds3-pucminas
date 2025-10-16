@@ -2,44 +2,40 @@ package model;
 
 import java.io.*;
 
+/**
+ * Classe que representa a entidade Categoria.
+ */
 public class Categoria implements Register {
 
-    private int id;
+    private int idCategoria;
     private String nome;
 
     public Categoria() {
-        this.id = -1;
+        this.idCategoria = -1;
         this.nome = "";
     }
 
     public Categoria(String nome) {
-        this.id = -1;
+        this.idCategoria = -1;
         this.nome = nome;
     }
 
-    @Override
-    public int getID() {
-        return this.id;
-    }
+    // --- MÉTODOS DA INTERFACE REGISTER ---
 
     @Override
-    public void setID(int id) {
-        this.id = id;
-    }
+    public int getID() { return this.idCategoria; }
 
-    public String getNome() {
-        return nome;
-    }
+    @Override
+    public void setID(int id) { this.idCategoria = id; }
 
-    public void setNome(String nome) {
-        this.nome = nome;
-    }
+    @Override
+    public String getSecondaryKey() { return this.nome; }
 
     @Override
     public byte[] toByteArray() throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        dos.writeInt(this.id);
+        dos.writeInt(this.idCategoria);
         dos.writeUTF(this.nome);
         return baos.toByteArray();
     }
@@ -48,22 +44,18 @@ public class Categoria implements Register {
     public void fromByteArray(byte[] byteArray) throws IOException {
         ByteArrayInputStream bais = new ByteArrayInputStream(byteArray);
         DataInputStream dis = new DataInputStream(bais);
-        this.id = dis.readInt();
+        this.idCategoria = dis.readInt();
         this.nome = dis.readUTF();
     }
 
-    @Override
-    public String toString() {
-        return "Categoria{" +
-                "id=" + id +
-                ", nome='" + nome + '\'' +
-                '}';
-    }
+    // --- GETTERS E SETTERS ---
+
+    public String getNome() { return nome; }
+    public void setNome(String nome) { this.nome = nome; }
 
     @Override
-    public String getSecondaryKey() {
-        // A chave secundária para Categoria também será o nome
-        return this.nome;
+    public String toString() {
+        return "Categoria [ID=" + idCategoria + ", Nome='" + nome + "']";
     }
 }
 
