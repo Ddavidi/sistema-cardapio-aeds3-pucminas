@@ -23,11 +23,9 @@ public class DAO<T extends Register> {
         this.dbFile = new RandomAccessFile(dbFilePath, "rw");
         this.constructor = clazz.getConstructor();
 
-        // Inicializa o Hash Extensível para a chave primária (ID)
         String baseName = dbFilePath.replace(".db", "");
         this.hash = new ExtensibleHash(baseName + ".hash.dir", baseName + ".hash.bkt");
 
-        // Inicializa a Árvore B+ para a chave secundária (se aplicável)
         if(useBPlusTree) {
             this.bPlusTree = new BPlusTree(baseName + ".bptree.idx");
         } else {
@@ -35,14 +33,10 @@ public class DAO<T extends Register> {
         }
 
         if (dbFile.length() == 0) {
-            // Cabeçalho: Escreve o último ID como 0 se o ficheiro for novo
             dbFile.writeInt(0);
         }
     }
 
-    /**
-     * Fecha todos os ficheiros abertos por este DAO.
-     */
     public void close() throws IOException {
         dbFile.close();
         hash.close();
@@ -64,12 +58,10 @@ public class DAO<T extends Register> {
         dbFile.seek(dbFile.length());
         long posicao = dbFile.getFilePointer();
 
-        // Escreve o registo no ficheiro de dados
         dbFile.writeByte(0); // Lápide (0 = ativo)
         dbFile.writeInt(byteArray.length);
         dbFile.write(byteArray);
 
-        // Atualiza os índices
         hash.insert(novoID, posicao);
         if (bPlusTree != null) {
             bPlusTree.insert(obj.getSecondaryKey(), novoID);
@@ -84,7 +76,7 @@ public class DAO<T extends Register> {
 
         dbFile.seek(posicao);
         byte lapide = dbFile.readByte();
-        if (lapide == 1) return null; // Registo excluído
+        if (lapide == 1) return null;
 
         int tamanho = dbFile.readInt();
         byte[] byteArray = new byte[tamanho];
@@ -95,61 +87,80 @@ public class DAO<T extends Register> {
         return obj;
     }
 
+    /**
+     * MÉTODO CORRIGIDO: Agora usa hash.update() para garantir a consistência do índice.
+     */
     public boolean update(T obj) throws Exception {
+        T oldObj = read(obj.getID());
+        if (oldObj == null) return false;
+
+        String oldSecondaryKey = (bPlusTree != null) ? oldObj.getSecondaryKey() : null;
+
         long posicao = hash.search(obj.getID());
-        if (posicao == -1) return false;
-
-        dbFile.seek(posicao);
-        byte lapide = dbFile.readByte();
-        if (lapide == 1) return false;
-
-        int tamanhoAntigo = dbFile.readInt();
         byte[] novoByteArray = obj.toByteArray();
 
+        dbFile.seek(posicao);
+        dbFile.readByte(); // Pula a lápide
+        int tamanhoAntigo = dbFile.readInt();
+
         if (novoByteArray.length <= tamanhoAntigo) {
-            dbFile.seek(posicao + 5); // Pula lápide e tamanho
+            dbFile.seek(posicao + 5);
             dbFile.write(novoByteArray);
         } else {
             dbFile.seek(posicao);
-            dbFile.writeByte(1); // Marca o antigo como excluído
+            dbFile.writeByte(1); // Marca o registo antigo como excluído
 
             dbFile.seek(dbFile.length());
             long novaPosicao = dbFile.getFilePointer();
             dbFile.writeByte(0);
             dbFile.writeInt(novoByteArray.length);
             dbFile.write(novoByteArray);
-            hash.insert(obj.getID(), novaPosicao); // Atualiza o ponteiro no hash
+
+            // CORREÇÃO CRÍTICA: Usa o método update do hash
+            hash.update(obj.getID(), novaPosicao);
         }
 
-        // A atualização da Árvore B+ em caso de mudança da chave secundária não está implementada.
-        // Requereria apagar o nó antigo e inserir o novo.
+        if (bPlusTree != null) {
+            String newSecondaryKey = obj.getSecondaryKey();
+            if (oldSecondaryKey != null && !oldSecondaryKey.equals(newSecondaryKey)) {
+                bPlusTree.delete(oldSecondaryKey);
+                bPlusTree.insert(newSecondaryKey, obj.getID());
+            }
+        }
         return true;
     }
 
-    public boolean delete(int id) throws IOException {
+    public boolean delete(int id) throws Exception {
+        T obj = read(id);
+        if (obj == null) return false;
+
         long posicao = hash.search(id);
-        if (posicao == -1) return false;
-
         dbFile.seek(posicao);
-        dbFile.writeByte(1); // Marca a lápide como excluído
+        dbFile.writeByte(1);
 
-        // A remoção dos índices não está implementada nesta versão
+        hash.delete(id);
+        if (bPlusTree != null) {
+            bPlusTree.delete(obj.getSecondaryKey());
+        }
+
         return true;
     }
 
     public List<T> listAll() throws Exception {
         List<T> lista = new ArrayList<>();
-        dbFile.seek(4); // Pula o cabeçalho
+        dbFile.seek(4);
         while (dbFile.getFilePointer() < dbFile.length()) {
-            long pos = dbFile.getFilePointer();
             byte lapide = dbFile.readByte();
             int tamanho = dbFile.readInt();
-            byte[] byteArray = new byte[tamanho];
-            dbFile.read(byteArray);
+
             if (lapide == 0) {
+                byte[] byteArray = new byte[tamanho];
+                dbFile.read(byteArray);
                 T obj = constructor.newInstance();
                 obj.fromByteArray(byteArray);
                 lista.add(obj);
+            } else {
+                dbFile.skipBytes(tamanho);
             }
         }
         return lista;

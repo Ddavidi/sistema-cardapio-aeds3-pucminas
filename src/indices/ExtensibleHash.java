@@ -13,9 +13,8 @@ public class ExtensibleHash {
     private final RandomAccessFile directoryFile;
     private final RandomAccessFile bucketsFile;
     private int globalDepth;
-    private final int BUCKET_SIZE = 4; // Quantos pares (chave, valor) cabem num balde
+    private final int BUCKET_SIZE = 4;
 
-    // Classe interna para representar um Balde (Bucket)
     private class Bucket {
         long address;
         int localDepth;
@@ -55,7 +54,6 @@ public class ExtensibleHash {
         this.bucketsFile = new RandomAccessFile(buckPath, "rw");
 
         if (directoryFile.length() == 0) {
-            // Inicializa o diretório e o primeiro balde
             globalDepth = 1;
             directoryFile.writeInt(globalDepth);
 
@@ -77,13 +75,18 @@ public class ExtensibleHash {
         bucketsFile.close();
     }
 
-    public void insert(int key, long value) throws IOException {
-        int hash = key & ((1 << globalDepth) - 1);
-        directoryFile.seek(4 + (long) hash * 8);
-        long bucketAddress = directoryFile.readLong();
+    // --- MÉTODOS PÚBLICOS ---
 
-        Bucket b = new Bucket(bucketAddress, 0);
-        b.readFromFile();
+    public void insert(int key, long value) throws IOException {
+        Bucket b = findBucket(key);
+
+        // Verifica se a chave já existe para evitar duplicados
+        for(int i=0; i < b.count; i++) {
+            if(b.keys[i] == key) {
+                // Idealmente, lançaria uma exceção de chave duplicada
+                return;
+            }
+        }
 
         if (b.count < BUCKET_SIZE) {
             b.keys[b.count] = key;
@@ -91,85 +94,154 @@ public class ExtensibleHash {
             b.count++;
             b.writeToFile();
         } else {
-            // Balde cheio, precisa de dividir
-            if (b.localDepth == globalDepth) {
-                // Duplica o diretório
-                globalDepth++;
-                directoryFile.seek(0);
-                directoryFile.writeInt(globalDepth);
-                long newDirSize = (long) (1 << globalDepth);
-                long[] oldDir = new long[1 << (globalDepth - 1)];
-                directoryFile.seek(4);
-                for(int i=0; i < oldDir.length; i++) {
-                    oldDir[i] = directoryFile.readLong();
-                }
-                directoryFile.seek(4);
-                for(int i=0; i<newDirSize; i++) {
-                    directoryFile.writeLong(oldDir[i/2]);
-                }
-            }
-
-            // Divide o balde
-            b.localDepth++;
-            Bucket newB = new Bucket(bucketsFile.length(), b.localDepth);
-
-            // Redistribui as chaves
-            List<Integer> tempKeys = new ArrayList<>();
-            List<Long> tempValues = new ArrayList<>();
-            for(int i=0; i<b.count; i++) {
-                tempKeys.add(b.keys[i]);
-                tempValues.add(b.values[i]);
-            }
-            tempKeys.add(key);
-            tempValues.add(value);
-
-            b.count = 0;
-            for(int i=0; i<tempKeys.size(); i++){
-                int currentKey = tempKeys.get(i);
-                long currentValue = tempValues.get(i);
-                int newHash = currentKey & ((1 << b.localDepth) - 1);
-
-                if(newHash == (key & ((1 << b.localDepth) - 1))){
-                    b.keys[b.count] = currentKey;
-                    b.values[b.count] = currentValue;
-                    b.count++;
-                } else {
-                    newB.keys[newB.count] = currentKey;
-                    newB.values[newB.count] = currentValue;
-                    newB.count++;
-                }
-            }
-
-            b.writeToFile();
-            newB.writeToFile();
-
-            // Atualiza os ponteiros no diretório
-            for(int i=0; i < (1 << globalDepth); i++){
-                if((i & ((1 << b.localDepth) - 1)) == (key & ((1 << b.localDepth) - 1))){
-                    directoryFile.seek(4 + (long) i * 8);
-                    directoryFile.writeLong(b.address);
-                } else if ((i & ((1 << newB.localDepth) - 1)) == (key & ((1 << newB.localDepth) - 1))){
-                    directoryFile.seek(4 + (long) i * 8);
-                    directoryFile.writeLong(newB.address);
-                }
-            }
+            splitBucket(b);
+            insert(key, value); // Tenta a inserção novamente após a divisão
         }
     }
 
+    /**
+     * NOVO MÉTODO: Atualiza o ponteiro de uma chave existente.
+     * @param key A chave (ID) a ser atualizada.
+     * @param value O novo ponteiro (posição no ficheiro de dados).
+     * @return true se a chave foi encontrada e atualizada, false caso contrário.
+     */
+    public boolean update(int key, long value) throws IOException {
+        Bucket b = findBucket(key);
+        for (int i = 0; i < b.count; i++) {
+            if (b.keys[i] == key) {
+                b.values[i] = value;
+                b.writeToFile();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean delete(int key) throws IOException {
+        Bucket b = findBucket(key);
+        for (int i = 0; i < b.count; i++) {
+            if (b.keys[i] == key) {
+                b.keys[i] = b.keys[b.count - 1];
+                b.values[i] = b.values[b.count - 1];
+                b.count--;
+                b.writeToFile();
+                return true;
+            }
+        }
+        return false;
+    }
+
     public long search(int key) throws IOException {
+        Bucket b = findBucket(key);
+        for (int i = 0; i < b.count; i++) {
+            if (b.keys[i] == key) {
+                return b.values[i];
+            }
+        }
+        return -1;
+    }
+
+    // --- MÉTODOS AUXILIARES ---
+
+    private Bucket findBucket(int key) throws IOException {
         int hash = key & ((1 << globalDepth) - 1);
         directoryFile.seek(4 + (long) hash * 8);
         long bucketAddress = directoryFile.readLong();
 
         Bucket b = new Bucket(bucketAddress, 0);
         b.readFromFile();
+        return b;
+    }
 
-        for (int i = 0; i < b.count; i++) {
-            if (b.keys[i] == key) {
-                return b.values[i];
+    private void splitBucket(Bucket b) throws IOException {
+        if (b.localDepth == globalDepth) {
+            doubleDirectory();
+        }
+
+        b.localDepth++;
+        Bucket newB = new Bucket(bucketsFile.length(), b.localDepth);
+
+        List<Integer> tempKeys = new ArrayList<>();
+        List<Long> tempValues = new ArrayList<>();
+        for(int i=0; i<b.count; i++) {
+            tempKeys.add(b.keys[i]);
+            tempValues.add(b.values[i]);
+        }
+
+        b.count = 0;
+        newB.count = 0;
+
+        for(int i=0; i<tempKeys.size(); i++){
+            redistributeEntry(b, newB, tempKeys.get(i), tempValues.get(i));
+        }
+
+        b.writeToFile();
+        newB.writeToFile();
+
+        updateDirectoryAfterSplit(b, newB);
+    }
+
+    private void doubleDirectory() throws IOException {
+        long oldDirSize = 1L << globalDepth;
+        long[] oldDirPointers = new long[(int)oldDirSize];
+        directoryFile.seek(4);
+        for(int i=0; i<oldDirSize; i++) {
+            oldDirPointers[i] = directoryFile.readLong();
+        }
+
+        globalDepth++;
+        directoryFile.seek(0);
+        directoryFile.writeInt(globalDepth);
+
+        for(int i=0; i < oldDirPointers.length * 2; i++) {
+            directoryFile.writeLong(oldDirPointers[i/2]);
+        }
+    }
+
+    private void redistributeEntry(Bucket b1, Bucket b2, int key, long value) {
+        int hash = key & ((1 << b1.localDepth) - 1);
+        int originalBucketHash = getBucketHash(b1);
+
+        if (hash == originalBucketHash) {
+            b1.keys[b1.count] = key;
+            b1.values[b1.count] = value;
+            b1.count++;
+        } else {
+            b2.keys[b2.count] = key;
+            b2.values[b2.count] = value;
+            b2.count++;
+        }
+    }
+
+    private void updateDirectoryAfterSplit(Bucket b1, Bucket b2) throws IOException {
+        int hash1 = getBucketHash(b1);
+        int hash2 = getBucketHash(b2);
+
+        long dirSize = 1L << globalDepth;
+        for(int i=0; i < dirSize; i++){
+            int currentHash = i & ((1 << b1.localDepth) - 1);
+            if (currentHash == hash1) {
+                directoryFile.seek(4 + (long) i * 8);
+                directoryFile.writeLong(b1.address);
+            } else if(currentHash == hash2) {
+                directoryFile.seek(4 + (long) i * 8);
+                directoryFile.writeLong(b2.address);
             }
         }
-        return -1; // Não encontrado
+    }
+
+    private int getBucketHash(Bucket b) {
+        // A forma como as chaves são distribuídas depende da sua profundidade local.
+        // O primeiro ponteiro no diretório que aponta para este balde pode ser usado para derivar o seu "hash"
+        for (int i=0; i < (1 << globalDepth); i++) {
+            try {
+                directoryFile.seek(4 + (long)i * 8);
+                if (directoryFile.readLong() == b.address) {
+                    return i & ((1 << b.localDepth) - 1);
+                }
+            } catch(IOException e) { /* Ignora */ }
+        }
+        return -1; // Não deveria acontecer
     }
 }
 
