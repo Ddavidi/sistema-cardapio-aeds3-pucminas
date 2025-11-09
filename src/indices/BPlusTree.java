@@ -15,7 +15,7 @@ public class BPlusTree {
     private final int ORDER = 5;
     private final int MAX_KEYS = ORDER - 1;
     private final int MIN_KEYS = (ORDER - 1) / 2;
-    private final int KEY_SIZE = 30;
+    private final int KEY_SIZE = 30; // Aumentado para caber a chave composta (10 + 1 + 10 = 21)
     private long rootAddress;
 
     private class Node {
@@ -85,7 +85,6 @@ public class BPlusTree {
     // --- MÉTODOS PÚBLICOS ---
 
     public void insert(String key, int value) throws IOException {
-        // (Este método permanece igual)
         Node root = new Node(rootAddress);
         root.readFromFile();
         if (root.keyCount == MAX_KEYS) {
@@ -103,50 +102,68 @@ public class BPlusTree {
         }
     }
 
-    /**
-     * @param key A chave (nome) a ser removida.
-     * @return true se a chave foi encontrada e removida, false caso contrário.
-     */
     public boolean delete(String key) throws IOException {
         return deleteRecursive(rootAddress, key);
     }
 
-    private boolean deleteRecursive(long nodeAddress, String key) throws IOException {
-        Node node = new Node(nodeAddress);
-        node.readFromFile();
-
-        int i = 0;
-        while (i < node.keyCount && key.compareTo(node.keys[i]) > 0) {
-            i++;
-        }
-
-        if (node.isLeaf) {
-            if (i < node.keyCount && key.equals(node.keys[i])) {
-                // Chave encontrada, vamos removê-la
-                for (int j = i; j < node.keyCount - 1; j++) {
-                    node.keys[j] = node.keys[j + 1];
-                    node.values[j] = node.values[j + 1];
-                }
-                node.keyCount--;
-                node.writeToFile();
-                return true;
-            }
-            return false; // Chave não encontrada na folha
-        } else {
-            // Continua a busca no filho apropriado
-            return deleteRecursive(node.children[i], key);
-        }
+    public List<Integer> search(String key) throws IOException {
+        List<Integer> results = new ArrayList<>();
+        searchRecursive(rootAddress, key, results, true);
+        return results;
     }
 
-    public List<Integer> search(String key) throws IOException {
-        // (Este método permanece igual)
+    /**
+     * Busca por prefixo.
+     * Encontra todos os IDs cujas chaves começam com o prefixo dado.
+     */
+    public List<Integer> searchByPrefix(String prefix) throws IOException {
         List<Integer> results = new ArrayList<>();
-        searchRecursive(rootAddress, key, results);
+
+        // 1. Encontra o nó folha onde o prefixo começaria
+        Node node = new Node(rootAddress);
+        node.readFromFile();
+        while (!node.isLeaf) {
+            int i = 0;
+            while (i < node.keyCount && prefix.compareTo(node.keys[i]) > 0) {
+                i++;
+            }
+            node = new Node(node.children[i]);
+            node.readFromFile();
+        }
+
+        // 2. Percorre a lista de folhas sequencialmente
+        while (node != null) {
+            boolean prefixFound = false;
+            for (int i = 0; i < node.keyCount; i++) {
+                if (node.keys[i].startsWith(prefix)) {
+                    results.add(node.values[i]);
+                    prefixFound = true;
+                } else if (prefixFound) {
+                    // Se já encontrámos o prefixo e agora falhou, podemos parar
+                    return results;
+                }
+            }
+
+            // Se nenhuma chave nesta folha bateu, mas a próxima pode bater
+            // (ex: prefixo "10-" e a folha acaba em "09-")
+
+            long nextNodeAddress = node.children[ORDER - 1];
+            if (nextNodeAddress == 0) {
+                node = null; // Fim da lista
+            } else {
+                node = new Node(nextNodeAddress);
+                node.readFromFile();
+                // Otimização: Se a primeira chave do próximo nó for maior que o prefixo, paramos
+                if (node.keyCount > 0 && !node.keys[0].startsWith(prefix) && prefixFound) {
+                    node = null;
+                }
+            }
+        }
+
         return results;
     }
 
     public List<Integer> listAll() throws IOException {
-        // (Este método permanece igual)
         List<Integer> allValues = new ArrayList<>();
         Node node = new Node(rootAddress);
         node.readFromFile();
@@ -168,8 +185,28 @@ public class BPlusTree {
 
     // --- MÉTODOS AUXILIARES ---
 
-    private void searchRecursive(long nodeAddress, String key, List<Integer> results) throws IOException {
-        // (Este método permanece igual)
+    private boolean deleteRecursive(long nodeAddress, String key) throws IOException {
+        Node node = new Node(nodeAddress);
+        node.readFromFile();
+        int i = 0;
+        while (i < node.keyCount && key.compareTo(node.keys[i]) > 0) i++;
+        if (node.isLeaf) {
+            if (i < node.keyCount && key.equals(node.keys[i])) {
+                for (int j = i; j < node.keyCount - 1; j++) {
+                    node.keys[j] = node.keys[j + 1];
+                    node.values[j] = node.values[j + 1];
+                }
+                node.keyCount--;
+                node.writeToFile();
+                return true;
+            }
+            return false;
+        } else {
+            return deleteRecursive(node.children[i], key);
+        }
+    }
+
+    private void searchRecursive(long nodeAddress, String key, List<Integer> results, boolean exactMatch) throws IOException {
         Node node = new Node(nodeAddress);
         node.readFromFile();
         int i = 0;
@@ -177,12 +214,11 @@ public class BPlusTree {
         if (node.isLeaf) {
             if (i < node.keyCount && key.equals(node.keys[i])) results.add(node.values[i]);
         } else {
-            searchRecursive(node.children[i], key, results);
+            searchRecursive(node.children[i], key, results, exactMatch);
         }
     }
 
     private void insertNonFull(Node node, String key, int value) throws IOException {
-        // (Este método permanece igual)
         if (node.isLeaf) {
             int i = node.keyCount - 1;
             while (i >= 0 && key.compareTo(node.keys[i]) < 0) {
@@ -211,7 +247,6 @@ public class BPlusTree {
     }
 
     private void splitChild(Node parent, int childIndex, Node child) throws IOException {
-        // (Este método permanece igual)
         Node newChild = new Node(file.length());
         newChild.isLeaf = child.isLeaf;
         String medianKey = child.keys[MIN_KEYS];
@@ -246,4 +281,3 @@ public class BPlusTree {
         newChild.writeToFile();
     }
 }
-
