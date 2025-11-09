@@ -35,11 +35,16 @@ public class ProdutoCardapio implements Register {
     @Override
     public void setID(int id) { this.idProdutoCardapio = id; }
 
+    /**
+     * Retorna uma chave secundária composta, formatada como "idCardapio-idProduto".
+     * O padding (ex: %010d) garante que as chaves sejam ordenadas lexicograficamente
+     * de forma correta (ex: "10-" vem depois de "9-").
+     * Isto permite buscas por prefixo na Árvore B+ (ex: "todos os produtos do cardápio 10").
+     * @return A chave secundária composta.
+     */
     @Override
     public String getSecondaryKey() {
-        // Esta entidade não tem uma chave secundária óbvia,
-        // podemos retornar uma combinação ou apenas o ID como String.
-        return Integer.toString(this.idProdutoCardapio);
+        return String.format("%010d-%010d", this.idCardapio, this.idProduto);
     }
 
     @Override
@@ -78,4 +83,3 @@ public class ProdutoCardapio implements Register {
                 ", ID Cardapio=" + idCardapio + ", Preço=" + preco + "]";
     }
 }
-

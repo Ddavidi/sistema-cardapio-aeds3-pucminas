@@ -58,7 +58,7 @@ public class DAO<T extends Register> {
         dbFile.seek(dbFile.length());
         long posicao = dbFile.getFilePointer();
 
-        dbFile.writeByte(0); // Lápide (0 = ativo)
+        dbFile.writeByte(0);
         dbFile.writeInt(byteArray.length);
         dbFile.write(byteArray);
 
@@ -87,9 +87,6 @@ public class DAO<T extends Register> {
         return obj;
     }
 
-    /**
-     * MÉTODO CORRIGIDO: Agora usa hash.update() para garantir a consistência do índice.
-     */
     public boolean update(T obj) throws Exception {
         T oldObj = read(obj.getID());
         if (oldObj == null) return false;
@@ -100,7 +97,7 @@ public class DAO<T extends Register> {
         byte[] novoByteArray = obj.toByteArray();
 
         dbFile.seek(posicao);
-        dbFile.readByte(); // Pula a lápide
+        dbFile.readByte();
         int tamanhoAntigo = dbFile.readInt();
 
         if (novoByteArray.length <= tamanhoAntigo) {
@@ -108,7 +105,7 @@ public class DAO<T extends Register> {
             dbFile.write(novoByteArray);
         } else {
             dbFile.seek(posicao);
-            dbFile.writeByte(1); // Marca o registo antigo como excluído
+            dbFile.writeByte(1);
 
             dbFile.seek(dbFile.length());
             long novaPosicao = dbFile.getFilePointer();
@@ -116,7 +113,6 @@ public class DAO<T extends Register> {
             dbFile.writeInt(novoByteArray.length);
             dbFile.write(novoByteArray);
 
-            // CORREÇÃO CRÍTICA: Usa o método update do hash
             hash.update(obj.getID(), novaPosicao);
         }
 
@@ -181,5 +177,20 @@ public class DAO<T extends Register> {
         }
         return listaOrdenada;
     }
-}
 
+    public List<T> listAllBySecondaryKeyPrefix(String prefix) throws Exception {
+        if (bPlusTree == null) {
+            throw new UnsupportedOperationException("A Árvore B+ não está habilitada para esta entidade.");
+        }
+        List<T> listaOrdenada = new ArrayList<>();
+        List<Integer> idsOrdenados = bPlusTree.searchByPrefix(prefix);
+
+        for (int id : idsOrdenados) {
+            T obj = read(id);
+            if(obj != null) {
+                listaOrdenada.add(obj);
+            }
+        }
+        return listaOrdenada;
+    }
+}
