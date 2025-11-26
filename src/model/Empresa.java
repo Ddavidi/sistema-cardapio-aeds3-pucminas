@@ -1,26 +1,26 @@
 package model;
 
+import seguranca.RSA; // IMPORTANTE
 import java.io.*;
 import java.util.Arrays;
 import java.util.Date;
 
-/**
- * Classe que representa a entidade Empresa.
- * Contém um campo multivalorado (telefones) e um campo de data.
- */
 public class Empresa implements Register {
 
     private int idEmpresa;
     private String nome;
-    private String cnpj;
+    private String cnpj; // Será armazenado criptografado no ficheiro
     private Date dataCadastro;
-    private String[] telefones; // CAMPO MULTIVALORADO
+    private String[] telefones;
+
+    // Instância estática do RSA para não recarregar chaves a cada objeto
+    private static RSA rsa = new RSA();
 
     public Empresa() {
         this.idEmpresa = -1;
         this.nome = "";
         this.cnpj = "";
-        this.dataCadastro = new Date(); // Data atual por padrão
+        this.dataCadastro = new Date();
         this.telefones = new String[0];
     }
 
@@ -28,7 +28,7 @@ public class Empresa implements Register {
         this.idEmpresa = -1;
         this.nome = nome;
         this.cnpj = cnpj;
-        this.dataCadastro = new Date(); // Data da criação do objeto
+        this.dataCadastro = new Date();
         this.telefones = telefones;
     }
 
@@ -50,10 +50,15 @@ public class Empresa implements Register {
 
         dos.writeInt(this.idEmpresa);
         dos.writeUTF(this.nome);
-        dos.writeUTF(this.cnpj);
-        dos.writeLong(this.dataCadastro.getTime()); // Salva a data como um long
 
-        // Converte o array de telefones numa única String separada por ";"
+        // --- CRIPTOGRAFIA RSA ---
+        // Criptografa o CNPJ antes de escrever
+        String cnpjCifrado = rsa.encrypt(this.cnpj);
+        dos.writeUTF(cnpjCifrado);
+        // ------------------------
+
+        dos.writeLong(this.dataCadastro.getTime());
+
         String telefonesStr = String.join(";", this.telefones);
         dos.writeUTF(telefonesStr);
 
@@ -67,10 +72,19 @@ public class Empresa implements Register {
 
         this.idEmpresa = dis.readInt();
         this.nome = dis.readUTF();
-        this.cnpj = dis.readUTF();
-        this.dataCadastro = new Date(dis.readLong()); // Lê o long e converte para data
 
-        // Lê a string única e a converte de volta para um array
+        // --- DESCRIPTOGRAFIA RSA ---
+        // Lê o texto cifrado e descriptografa para a memória
+        String cnpjCifrado = dis.readUTF();
+        try {
+            this.cnpj = rsa.decrypt(cnpjCifrado);
+        } catch (Exception e) {
+            this.cnpj = "ERRO_DECRIPTOGRAFIA";
+        }
+        // ---------------------------
+
+        this.dataCadastro = new Date(dis.readLong());
+
         String telefonesStr = dis.readUTF();
         if (telefonesStr.isEmpty()) {
             this.telefones = new String[0];
@@ -80,7 +94,6 @@ public class Empresa implements Register {
     }
 
     // --- GETTERS E SETTERS ---
-
     public String getNome() { return nome; }
     public void setNome(String nome) { this.nome = nome; }
     public String getCnpj() { return cnpj; }
@@ -92,7 +105,6 @@ public class Empresa implements Register {
     @Override
     public String toString() {
         return "Empresa [ID=" + idEmpresa + ", Nome='" + nome + "', CNPJ='" + cnpj +
-                "', Data de Cadastro=" + dataCadastro + ", Telefones=" + Arrays.toString(telefones) + "]";
+                "', Data=" + dataCadastro + ", Tels=" + Arrays.toString(telefones) + "]";
     }
 }
-
