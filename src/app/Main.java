@@ -1,6 +1,5 @@
 package app;
 
-import compressao.BackupManager;
 import dao.DAO;
 import model.Cardapio;
 import model.Categoria;
@@ -22,6 +21,7 @@ public class Main {
     private static DAO<ProdutoCardapio> produtoCardapioDAO;
 
     public static void main(String[] args) {
+        // (Este método permanece igual)
         try {
             inicializarDAOs();
             Scanner console = new Scanner(System.in);
@@ -33,7 +33,6 @@ public class Main {
                 System.out.println("3) Gerenciar Categorias");
                 System.out.println("4) Gerenciar Produtos");
                 System.out.println("5) Gerenciar Relações (Produto-Cardápio)");
-                System.out.println("6) Realizar Backup Completo (Compressão)"); // NOVA OPÇÃO
                 System.out.println("9) Apagar TODOS os dados (Resetar)");
                 System.out.println("0) Sair");
                 System.out.print("Opção: ");
@@ -51,22 +50,6 @@ public class Main {
                     case 3: menuCategorias(console); break;
                     case 4: menuProdutos(console); break;
                     case 5: menuProdutoCardapio(console); break;
-
-                    case 6: // LÓGICA DO BACKUP
-                        System.out.print("Digite a versão do backup (ex: 1): ");
-                        int versao = console.nextInt();
-                        console.nextLine();
-
-                        System.out.println("Fechando conexões para garantir integridade...");
-                        fecharDAOs(); // Garante que tudo foi escrito no disco
-
-                        // Chama o gestor de backup
-                        BackupManager.createBackup(versao);
-
-                        System.out.println("Reabrindo conexões...");
-                        inicializarDAOs(); // Reabre para continuar a usar o programa
-                        break;
-
                     case 9: confirmarEApagarDados(console); break;
                     case 0: System.out.println("Saindo do sistema..."); break;
                     default: System.out.println("Opção inválida!");
@@ -83,6 +66,7 @@ public class Main {
     // --- MÉTODOS DE MENU E UTILITÁRIOS ---
 
     public static void inicializarDAOs() throws Exception {
+        // (Este método permanece igual)
         empresaDAO = new DAO<>("empresas.db", Empresa.class, true);
         cardapioDAO = new DAO<>("cardapios.db", Cardapio.class, true);
         produtoDAO = new DAO<>("produtos.db", Produto.class, true);
@@ -91,14 +75,16 @@ public class Main {
     }
 
     public static void fecharDAOs() throws Exception {
-        if (empresaDAO != null) empresaDAO.close();
-        if (cardapioDAO != null) cardapioDAO.close();
-        if (produtoDAO != null) produtoDAO.close();
-        if (categoriaDAO != null) categoriaDAO.close();
-        if (produtoCardapioDAO != null) produtoCardapioDAO.close();
+        // (Este método permanece igual)
+        empresaDAO.close();
+        cardapioDAO.close();
+        produtoDAO.close();
+        categoriaDAO.close();
+        produtoCardapioDAO.close();
     }
 
     public static void confirmarEApagarDados(Scanner console) throws Exception {
+        // (Este método permanece igual)
         System.out.println("\n--- ATENÇÃO! ---");
         System.out.println("Esta ação irá apagar permanentemente TODOS os ficheiros da base de dados.");
         System.out.print("Tem a certeza que deseja continuar? (S/N): ");
@@ -108,18 +94,11 @@ public class Main {
             System.out.println("A fechar conexões...");
             fecharDAOs();
             System.out.println("A apagar ficheiros...");
-
-            // Dados
             new File("empresas.db").delete(); new File("empresas.hash.dir").delete(); new File("empresas.hash.bkt").delete(); new File("empresas.bptree.idx").delete();
             new File("cardapios.db").delete(); new File("cardapios.hash.dir").delete(); new File("cardapios.hash.bkt").delete(); new File("cardapios.bptree.idx").delete();
             new File("produtos.db").delete(); new File("produtos.hash.dir").delete(); new File("produtos.hash.bkt").delete(); new File("produtos.bptree.idx").delete();
             new File("categorias.db").delete(); new File("categorias.hash.dir").delete(); new File("categorias.hash.bkt").delete();
             new File("produtocardapio.db").delete(); new File("produtocardapio.hash.dir").delete(); new File("produtocardapio.hash.bkt").delete(); new File("produtocardapio.bptree.idx").delete();
-
-            // Chaves RSA (Opcional: pode querer mantê-las)
-            new File("public.key").delete();
-            new File("private.key").delete();
-
             System.out.println("Base de dados resetada. A reiniciar conexões...");
             inicializarDAOs();
             System.out.println("Sistema pronto para ser usado novamente.");
@@ -128,7 +107,8 @@ public class Main {
         }
     }
 
-    // --- MENUS DE ENTIDADES ---
+    // --- MENUS DE ENTIDADES (Empresa, Cardapio, Produto, Categoria) ---
+    // (Os menus das outras entidades permanecem iguais)
 
     public static void menuEmpresas(Scanner console) throws Exception {
         int opcao;
@@ -411,7 +391,10 @@ public class Main {
         } while (opcao != 0);
     }
 
+    // --- MÉTODOS DO MENU DA FASE 3 ---
+
     public static void menuProdutoCardapio(Scanner console) throws Exception {
+        // (Este método permanece igual ao da versão anterior)
         int opcao;
         do {
             System.out.println("\n--- GERENCIAR RELAÇÕES (PRODUTO-CARDÁPIO) ---");
@@ -435,10 +418,10 @@ public class Main {
                     adicionarProdutoAoCardapio(console);
                     break;
                 case 2:
-                    listarProdutosDoCardapio(console);
+                    listarProdutosDoCardapio(console); // ATUALIZADO
                     break;
                 case 3:
-                    listarCardapiosDoProduto(console);
+                    listarCardapiosDoProduto(console); // MANTIDO
                     break;
                 case 4:
                     removerProdutoDoCardapio(console);
@@ -455,6 +438,7 @@ public class Main {
     }
 
     private static void adicionarProdutoAoCardapio(Scanner console) throws Exception {
+        // (Este método permanece igual)
         System.out.println("\n--- Adicionar Produto ao Cardápio ---");
 
         System.out.println("Cardápios disponíveis:");
@@ -480,6 +464,9 @@ public class Main {
         System.out.println("Produto (ID " + idProduto + ") adicionado ao Cardápio (ID " + idCardapio + ") com sucesso! (ID da Relação: " + idRelacao + ")");
     }
 
+    /**
+     * MÉTODO ATUALIZADO (FASE 3): Agora usa a busca otimizada por prefixo.
+     */
     private static void listarProdutosDoCardapio(Scanner console) throws Exception {
         System.out.println("\n--- Listar Produtos de um Cardápio (Otimizado) ---");
 
@@ -495,6 +482,7 @@ public class Main {
 
         System.out.println("\nProdutos no Cardápio: " + c.getNome());
 
+        // --- IMPLEMENTAÇÃO OTIMIZADA ---
         // 1. Formata o prefixo de busca
         String prefixo = String.format("%010d-", idCardapio);
 
@@ -514,6 +502,9 @@ public class Main {
         }
     }
 
+    /**
+     * MÉTODO MANTIDO (FASE 3): Permanece ineficiente como justificação de projeto.
+     */
     private static void listarCardapiosDoProduto(Scanner console) throws Exception {
         System.out.println("\n--- Listar Cardápios que contêm um Produto (Não Otimizado) ---");
 
@@ -529,7 +520,10 @@ public class Main {
 
         System.out.println("\nCardápios que contêm: " + p.getNome());
 
-        // Lista Cardapios O(N)
+        // IMPLEMENTAÇÃO (Ineficiente - O(N)):
+        // Esta busca percorre todas as relações. A otimização exigiria um
+        // segundo índice na tabela ProdutoCardapio, com a chave "idProduto-idCardapio".
+        // Para a Fase 3, otimizámos apenas a busca principal.
         List<ProdutoCardapio> todasRelacoes = produtoCardapioDAO.listAll();
         int count = 0;
         for (ProdutoCardapio relacao : todasRelacoes) {
@@ -546,6 +540,7 @@ public class Main {
     }
 
     private static void removerProdutoDoCardapio(Scanner console) throws Exception {
+        // (Este método permanece igual)
         System.out.println("\n--- Remover Relação Produto-Cardápio ---");
         System.out.println("Abaixo estão todas as relações ativas:");
         List<ProdutoCardapio> relacoes = produtoCardapioDAO.listAll();
